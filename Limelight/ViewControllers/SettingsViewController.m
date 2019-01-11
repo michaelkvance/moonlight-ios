@@ -151,12 +151,13 @@ static const int bitrateTable[] = {
     [self.multiControllerSelector setSelectedSegmentIndex:currentSettings.multiController ? 1 : 0];
     [self.audioOnPCSelector setSelectedSegmentIndex:currentSettings.playAudioOnPC ? 1 : 0];
     [self.hevcSelector setSelectedSegmentIndex:currentSettings.useHevc ? 1 : 0];
-    NSInteger onscreenControls = [currentSettings.onscreenControls integerValue];
     [self.resolutionSelector setSelectedSegmentIndex:resolution];
     [self.resolutionSelector addTarget:self action:@selector(newResolutionFpsChosen) forControlEvents:UIControlEventValueChanged];
     [self.framerateSelector setSelectedSegmentIndex:framerate];
     [self.framerateSelector addTarget:self action:@selector(newResolutionFpsChosen) forControlEvents:UIControlEventValueChanged];
+    NSInteger onscreenControls = [currentSettings.onscreenControls integerValue];
     [self.onscreenControlSelector setSelectedSegmentIndex:onscreenControls];
+    [self.customizeControlButton addTarget:self action:@selector(customizeControlsPressed) forControlEvents:UIControlEventTouchDown];
     [self.bitrateSlider setMinimumValue:0];
     [self.bitrateSlider setMaximumValue:(sizeof(bitrateTable) / sizeof(*bitrateTable)) - 1];
     [self.bitrateSlider setValue:[self getSliderValueForBitrate:_bitrate] animated:YES];
@@ -207,6 +208,11 @@ static const int bitrateTable[] = {
     assert(self.bitrateSlider.value < (sizeof(bitrateTable) / sizeof(*bitrateTable)));
     _bitrate = bitrateTable[(int)self.bitrateSlider.value];
     [self updateBitrateText];
+}
+
+- (void) customizeControlsPressed {
+    // wtf
+    printf("wtf!\n");
 }
 
 - (void) updateBitrateText {

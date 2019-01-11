@@ -542,36 +542,63 @@ static float L3_Y;
     [_r3Button removeFromSuperlayer];
 }
 
+// #mivance
+// The control area is the width of the client frame and the heigth in the case of iphone, and half the height in case of the ipad.
+// There is a 5% edge applied, but only on iPhone, strangely enough and only in the width dimension, not height.
+// XXX: Why only on phone?
+// On the ipad the height is halved again so that controls are only in the lower, reachable area, but no edge area is applied.
+
+// #mivance
+// Touch move handler.
+// Note there is a stick inner and outer size, and as soon as you start moving in the stick hit zone it will move the inner box around with your touch point with a width and height of the inner size.
+// It does not *grow* the frame, just moves it around.
+// The stick normalization value is calculated...
+
 - (BOOL) handleTouchMovedEvent:touches {
     BOOL updated = false;
     BOOL buttonTouch = false;
-    float rsMaxX = RS_CENTER_X + STICK_OUTER_SIZE / 2;
-    float rsMaxY = RS_CENTER_Y + STICK_OUTER_SIZE / 2;
-    float rsMinX = RS_CENTER_X - STICK_OUTER_SIZE / 2;
-    float rsMinY = RS_CENTER_Y - STICK_OUTER_SIZE / 2;
-    float lsMaxX = LS_CENTER_X + STICK_OUTER_SIZE / 2;
-    float lsMaxY = LS_CENTER_Y + STICK_OUTER_SIZE / 2;
-    float lsMinX = LS_CENTER_X - STICK_OUTER_SIZE / 2;
-    float lsMinY = LS_CENTER_Y - STICK_OUTER_SIZE / 2;
+    const float rsMaxX = RS_CENTER_X + STICK_OUTER_SIZE / 2;
+    const float rsMaxY = RS_CENTER_Y + STICK_OUTER_SIZE / 2;
+    const float rsMinX = RS_CENTER_X - STICK_OUTER_SIZE / 2;
+    const float rsMinY = RS_CENTER_Y - STICK_OUTER_SIZE / 2;
+    const float lsMaxX = LS_CENTER_X + STICK_OUTER_SIZE / 2;
+    const float lsMaxY = LS_CENTER_Y + STICK_OUTER_SIZE / 2;
+    const float lsMinX = LS_CENTER_X - STICK_OUTER_SIZE / 2;
+    const float lsMinY = LS_CENTER_Y - STICK_OUTER_SIZE / 2;
     
     for (UITouch* touch in touches) {
         CGPoint touchLocation = [touch locationInView:_view];
         float xLoc = touchLocation.x;
         float yLoc = touchLocation.y;
         if (touch == _lsTouch) {
+            // #mivance
+            // clamp the location to the max x,y
             if (xLoc > lsMaxX) xLoc = lsMaxX;
             if (xLoc < lsMinX) xLoc = lsMinX;
             if (yLoc > lsMaxY) yLoc = lsMaxY;
             if (yLoc < lsMinY) yLoc = lsMinY;
             
+            // #mivance
+            // this moves the frame to track the location which is a slightly weird way of doing things vs calculating all of your validity within the outer size ring... i wonder if this allows the touch up events to properly synchronize such that there is always a properly paired touch down and then touch up?
             _leftStick.frame = CGRectMake(xLoc - STICK_INNER_SIZE / 2, yLoc - STICK_INNER_SIZE / 2, STICK_INNER_SIZE, STICK_INNER_SIZE);
             
+            // default left stick center is at LS_CENTER_X which is at 35% of frame width on iphone + the edge offset which is 5% on iphone, so 40%
+            // LS_CENTER_Y is at 75% of frame height on iphone + edge offset in y which is 0, so 25% offset
+            // thus for a fake viewport of 1280, 720
+            // we'd have LS_CENTER_[XY] of [1280 * 0.4 == 512, 720 * 0.75 == 540]
+            // STICK_INNER is 48x48 (amusingly actually 48x49), and STICK_OUTER will be 80x80
+            // thus lsMaxX will be 512 + 40 == 552
+            // and lsMaxY will be 540 + 40 == 580
+            // note that xLoc and yLoc are clamped to the max
+            // so when xStickVal is at the edge it will end up something like 552 - 512 / 552 - 512, 40 / 40 == 1
             float xStickVal = (xLoc - LS_CENTER_X) / (lsMaxX - LS_CENTER_X);
             float yStickVal = (yLoc - LS_CENTER_Y) / (lsMaxY - LS_CENTER_Y);
             
+            // and then if it's within 10% of the width of the space it gets zero'd out
             if (fabsf(xStickVal) < STICK_DEAD_ZONE) xStickVal = 0;
             if (fabsf(yStickVal) < STICK_DEAD_ZONE) yStickVal = 0;
             
+            // and then we multiplye the stick val by 32767 to go from normalized [0,1] range to [-32768,32767]
             [_controllerSupport updateLeftStick:_controller x:0x7FFE * xStickVal y:0x7FFE * -yStickVal];
             
             updated = true;
@@ -593,6 +620,7 @@ static float L3_Y;
             
             updated = true;
         } else if (touch == _dpadTouch) {
+            // #mivance if we're moving around on the dpad, each movement clear all the flags and then only reactivate the flag for the element being touched
             [_controllerSupport clearButtonFlag:_controller
                                           flags:UP_FLAG | DOWN_FLAG | LEFT_FLAG | RIGHT_FLAG];
             
@@ -635,6 +663,10 @@ static float L3_Y;
         } else if (touch == _l3Touch) {
             buttonTouch = true;
         } else if (touch == _r3Touch) {
+            // #mivance not sure what's up with all of these being tracked
+            // whether the down is signalled as you're puttering around?
+            // a data oriented version of this that looped over an array
+            // of objects with IDs or something would be easier to log properly
             buttonTouch = true;
         }
         if ([_deadTouches containsObject:touch]) {
@@ -647,6 +679,17 @@ static float L3_Y;
         return updated || buttonTouch;
 }
 
+// #mivance
+// All input objects are manually enumerated and named as actual objects, e.g. _aButton.
+// We handle three different types of events: touch down, touch moved, touch up.
+// When we receive one of these we will loop over every single object in the OSC and handle them in a few ways:
+//   - for buttons, we flag them as down if in the down handler
+//   -
+// For all events we record the touch event into a private named touch object, e.g. _aTouch.
+// We track if any touch event was registered via updated.
+// If a stick was touched we track that via stickTouch.
+// Q: Why are _deadTouches, e.g. those outside any of the buttons or sticks, tracked?
+// A: They are looked up during move events, and then discarded on up events.
 - (BOOL)handleTouchDownEvent:touches {
     BOOL updated = false;
     BOOL stickTouch = false;
@@ -769,6 +812,15 @@ static float L3_Y;
     return updated || stickTouch;
 }
 
+// #mivance
+// Touch up handler.
+// Same basic infrastructure, loop over all named objects, and now setting the touch object to nil.
+// However instead of testing bounds for a hit test, we now check if the object itself is equivalent to the one already stored elsewhere. In that case, we clear it and also clear the button flag.
+// Note that for the sticks we reset their frame size back to their identity value.
+// Note also that the touch start time for sticks is reset to the current time.
+// Q: Why?
+// We check if an edge touch has resulted in a movemenet greater than 1/4 the width of the screen, in which case it is marked as a swipe.
+// We remove any dead touches.
 - (BOOL)handleTouchUpEvent:touches {
     BOOL updated = false;
     BOOL touched = false;

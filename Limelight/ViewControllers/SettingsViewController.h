@@ -15,6 +15,7 @@
 @property (strong, nonatomic) IBOutlet UISegmentedControl *framerateSelector;
 @property (strong, nonatomic) IBOutlet UISegmentedControl *resolutionSelector;
 @property (strong, nonatomic) IBOutlet UISegmentedControl *onscreenControlSelector;
+@property (strong, nonatomic) IBOutlet UIButton *customizeControlButton;
 @property (strong, nonatomic) IBOutlet UISegmentedControl *optimizeSettingsSelector;
 @property (strong, nonatomic) IBOutlet UISegmentedControl *multiControllerSelector;
 @property (strong, nonatomic) IBOutlet UISegmentedControl *audioOnPCSelector;
