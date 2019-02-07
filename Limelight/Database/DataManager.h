@@ -23,7 +23,10 @@
                  multiController:(BOOL)multiController
                        audioOnPC:(BOOL)audioOnPC
                          useHevc:(BOOL)useHevc
-                       enableHdr:(BOOL)enableHdr;
+                       enableHdr:(BOOL)enableHdr
+                   localDeadzone:(float)localDeadzone
+                  remoteDeadzone:(float)remoteDeadzone
+                        swapR2R3:(BOOL)swapR2R3;
 
 - (NSArray*) getHosts;
 - (void) updateHost:(TemporaryHost*)host;

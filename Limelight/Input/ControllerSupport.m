@@ -154,9 +154,31 @@
 {
     [_controllerStreamLock lock];
     @synchronized(controller) {
+        DataManager* dataMan = [[DataManager alloc] init];
+        TemporarySettings* settings = [dataMan getSettings];
+        BOOL swapR2R3 = settings.swapR2R3;
+        
+        short controllerNumber = _multiController ? controller.playerIndex : 0;
         // Player 1 is always present for OSC
-        LiSendMultiControllerEvent(_multiController ? controller.playerIndex : 0,
-                                   (_multiController ? _controllerNumbers : 1) | (_oscEnabled ? 1 : 0), controller.lastButtonFlags, controller.lastLeftTrigger, controller.lastRightTrigger, controller.lastLeftStickX, controller.lastLeftStickY, controller.lastRightStickX, controller.lastRightStickY);
+        short gamepadMask = (_multiController ? _controllerNumbers : 1) | (_oscEnabled ? 1 : 0);
+        short buttonFlags = controller.lastButtonFlags;
+        unsigned char leftTrigger = controller.lastLeftTrigger;
+        unsigned char rightTrigger = controller.lastRightTrigger;
+        short leftStickX = controller.lastLeftStickX;
+        short leftStickY = controller.lastLeftStickY;
+        short rightStickX = controller.lastRightStickX;
+        short rightStickY = controller.lastRightStickY;
+        
+        if (swapR2R3)
+        {
+            unsigned char R2value = (buttonFlags & RS_CLK_FLAG) != 0 ? 255 : 0;
+            short R3mask = (rightTrigger > 0) ? RS_CLK_FLAG : 0;
+            buttonFlags &= ~(RS_CLK_FLAG);
+            buttonFlags |= R3mask;
+            rightTrigger = R2value;
+        }
+
+        LiSendMultiControllerEvent(controllerNumber, gamepadMask, buttonFlags, leftTrigger, rightTrigger, leftStickX, leftStickY, rightStickX, rightStickY);
     }
     [_controllerStreamLock unlock];
 }

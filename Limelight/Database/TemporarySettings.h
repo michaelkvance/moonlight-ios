@@ -24,6 +24,9 @@
 @property (nonatomic) BOOL playAudioOnPC;
 @property (nonatomic) BOOL optimizeGames;
 @property (nonatomic) BOOL enableHdr;
+@property (nonatomic, retain) NSNumber * localDeadzone;
+@property (nonatomic, retain) NSNumber * remoteDeadzone;
+@property (nonatomic) BOOL swapR2R3;
 
 - (id) initFromSettings:(Settings*)settings;
 

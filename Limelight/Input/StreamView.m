@@ -39,7 +39,8 @@
 - (void) setupOnScreenControls:(ControllerSupport*)controllerSupport swipeDelegate:(id<EdgeDetectionDelegate>)swipeDelegate {
     onScreenControls = [[OnScreenControls alloc] initWithView:self controllerSup:controllerSupport swipeDelegate:swipeDelegate];
     DataManager* dataMan = [[DataManager alloc] init];
-    OnScreenControlsLevel level = (OnScreenControlsLevel)[[dataMan getSettings].onscreenControls integerValue];
+    TemporarySettings* settings = [dataMan getSettings];
+    OnScreenControlsLevel level = (OnScreenControlsLevel)[settings.onscreenControls integerValue];
     
     if (level == OnScreenControlsLevelAuto) {
         [controllerSupport initAutoOnScreenControlMode:onScreenControls];
@@ -48,6 +49,11 @@
         Log(LOG_I, @"Setting manual on-screen controls level: %d", (int)level);
         [onScreenControls setLevel:level];
     }
+    
+    float localDeadzone = [settings.localDeadzone floatValue];
+    float remoteDeadzone = [settings.remoteDeadzone floatValue];
+    [onScreenControls setDeadzones:localDeadzone remoteDeadzone:remoteDeadzone];
+    
     [self becomeFirstResponder];
 }
 

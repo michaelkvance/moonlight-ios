@@ -157,12 +157,13 @@ static const int bitrateTable[] = {
     [self.framerateSelector addTarget:self action:@selector(newResolutionFpsChosen) forControlEvents:UIControlEventValueChanged];
     NSInteger onscreenControls = [currentSettings.onscreenControls integerValue];
     [self.onscreenControlSelector setSelectedSegmentIndex:onscreenControls];
-    [self.customizeControlButton addTarget:self action:@selector(customizeControlsPressed) forControlEvents:UIControlEventTouchDown];
     [self.bitrateSlider setMinimumValue:0];
     [self.bitrateSlider setMaximumValue:(sizeof(bitrateTable) / sizeof(*bitrateTable)) - 1];
     [self.bitrateSlider setValue:[self getSliderValueForBitrate:_bitrate] animated:YES];
     [self.bitrateSlider addTarget:self action:@selector(bitrateSliderMoved) forControlEvents:UIControlEventValueChanged];
     [self updateBitrateText];
+    [self.localDeadzoneSlider addTarget:self action:@selector(localDeadzoneSliderMoved) forControlEvents:UIControlEventValueChanged];
+    [self.remoteDeadzoneSlider addTarget:self action:@selector(remoteDeadzoneSliderMoved) forControlEvents:UIControlEventValueChanged];
 }
 
 - (void) newResolutionFpsChosen {
@@ -210,9 +211,12 @@ static const int bitrateTable[] = {
     [self updateBitrateText];
 }
 
-- (void) customizeControlsPressed {
-    // wtf
-    printf("wtf!\n");
+- (void) localDeadzoneSliderMoved {
+    assert(self.localDeadzoneSlider.value >= 0.0f && self.localDeadzoneSlider.value <= 1.0f);
+}
+
+- (void) remoteDeadzoneSliderMoved {
+    assert(self.remoteDeadzoneSlider.value >= 0.0f && self.remoteDeadzoneSlider.value <= 1.0f);
 }
 
 - (void) updateBitrateText {
@@ -253,6 +257,10 @@ static const int bitrateTable[] = {
     BOOL multiController = [self.multiControllerSelector selectedSegmentIndex] == 1;
     BOOL audioOnPC = [self.audioOnPCSelector selectedSegmentIndex] == 1;
     BOOL useHevc = [self.hevcSelector selectedSegmentIndex] == 1;
+    float localDeadzone = [self.localDeadzoneSlider value];
+    float remoteDeadzone = [self.remoteDeadzoneSlider value];
+    BOOL swapR2R3 = [self.swapR2R3Selector selectedSegmentIndex] == 1;
+    
     [dataMan saveSettingsWithBitrate:_bitrate
                            framerate:framerate
                               height:height
@@ -263,7 +271,10 @@ static const int bitrateTable[] = {
                      multiController:multiController
                            audioOnPC:audioOnPC
                              useHevc:useHevc
-                           enableHdr:NO];
+                           enableHdr:NO
+                       localDeadzone:localDeadzone
+                      remoteDeadzone:remoteDeadzone
+                            swapR2R3:swapR2R3];
 }
 
 - (void)didReceiveMemoryWarning {

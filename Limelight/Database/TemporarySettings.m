@@ -27,6 +27,9 @@
     self.playAudioOnPC = settings.playAudioOnPC;
     self.enableHdr = settings.enableHdr;
     self.optimizeGames = settings.optimizeGames;
+    self.localDeadzone = settings.localDeadzone;
+    self.remoteDeadzone = settings.remoteDeadzone;
+    self.swapR2R3 = settings.swapR2R3;
     
     return self;
 }

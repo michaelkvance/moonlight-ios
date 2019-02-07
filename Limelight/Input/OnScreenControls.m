@@ -12,6 +12,46 @@
 #include "Limelight.h"
 
 #import "Moonlight-Swift.h"
+
+@interface DebugConsole : UILabel
+- (id) initWithFrame:(CGRect)frame;
+- (void) updateConsoleWithController:(Controller*)controller;
+@end
+
+@implementation DebugConsole {
+    
+}
+
+static NSString* formatString = @"Buttons = %x\nLeft=%d,%d\nRight=%d,%d";
+
+- (id) initWithFrame:(CGRect)frame {
+    self = [super initWithFrame:frame];
+    self.text = [NSString stringWithFormat:formatString, INT_MAX, SHRT_MIN, SHRT_MIN, SHRT_MIN, SHRT_MIN];
+    self.numberOfLines = 0;
+    self.backgroundColor = [UIColor clearColor];
+    self.textColor = [UIColor whiteColor];
+    self.shadowColor = [UIColor blackColor];
+    CGSize bounds = [self.text sizeWithAttributes:@{NSFontAttributeName:self.font}];
+    float x = ( frame.size.width / 2 ) - ( bounds.width / 2 );
+    float y = frame.origin.y + 10;
+    self.frame = CGRectMake(x, y, bounds.width, bounds.height);
+    self.text = [NSString stringWithFormat:formatString, 0, 0, 0, 0, 0];
+    //_debugText.hidden = TRUE;
+
+    return self;
+}
+
+- (void)updateConsoleWithController:(Controller*)controller {
+    int buttons = controller.lastButtonFlags;
+    short leftX = controller.lastLeftStickX;
+    short leftY = controller.lastLeftStickY;
+    short rightX = controller.lastRightStickX;
+    short rightY = controller.lastRightStickY;
+    self.text = [NSString stringWithFormat:formatString, buttons, leftX, leftY, rightX, rightY];
+}
+
+@end
+
 @class Controller;
 
 #define UPDATE_BUTTON(x, y) (buttonFlags = \
@@ -57,6 +97,8 @@
     UITouch* _l3Touch;
     UITouch* _edgeTouch;
     
+    DebugConsole* _debugConsole;
+    
     NSDate* l3TouchStart;
     NSDate* r3TouchStart;
     
@@ -88,7 +130,12 @@ static float D_PAD_CENTER_Y;
 static const float DEAD_ZONE_PADDING = 15;
 
 static const double STICK_CLICK_RATE = 100;
-static const float STICK_DEAD_ZONE = .1;
+
+static const float STICK_ANIMATION_DURATION = 0.05f;
+
+static float STICK_LOCAL_DEAD_ZONE;
+static float STICK_REMOTE_DEAD_ZONE;
+
 static float STICK_INNER_SIZE;
 static float STICK_OUTER_SIZE;
 static float LS_CENTER_X;
@@ -159,6 +206,9 @@ static float L3_Y;
     _rightStick = [CALayer layer];
     _edge = [CALayer layer];
     
+    _debugConsole = [[DebugConsole alloc] initWithFrame:_controlArea];
+    [_view addSubview:_debugConsole];
+
     [self setupEdgeDetection];
     
     return self;
@@ -167,6 +217,11 @@ static float L3_Y;
 - (void) setLevel:(OnScreenControlsLevel)level {
     _level = level;
     [self updateControls];
+}
+
+- (void) setDeadzones:(float)localDeadzone remoteDeadzone:(float)remoteDeadzone {
+    STICK_LOCAL_DEAD_ZONE = localDeadzone;
+    STICK_REMOTE_DEAD_ZONE = remoteDeadzone;
 }
 
 - (void) updateControls {
@@ -328,7 +383,7 @@ static float L3_Y;
     BUTTON_CENTER_X = _controlArea.size.width * .9 + _controlArea.origin.x;
     BUTTON_CENTER_Y = _controlArea.size.height * .60 + _controlArea.origin.y;
     
-    if (_iPad)
+    if ( 1 /* _iPad */ )
     {
         // The analog sticks are kept closer to the sides on iPad
         LS_CENTER_X = _controlArea.size.width * .22 + _controlArea.origin.x;
@@ -354,7 +409,7 @@ static float L3_Y;
     R1_Y = _controlArea.size.height * .27 + _controlArea.origin.y;
     R2_Y = _controlArea.size.height * .1 + _controlArea.origin.y;
     
-    if (_iPad) {
+    if ( 1 /* _iPad */ ) {
         // Move L/R buttons closer to the side on iPad
         L1_X = _controlArea.size.width * .05 + _controlArea.origin.x;
         L2_X = _controlArea.size.width * .05 + _controlArea.origin.x;
@@ -542,17 +597,29 @@ static float L3_Y;
     [_r3Button removeFromSuperlayer];
 }
 
-// #mivance
-// The control area is the width of the client frame and the heigth in the case of iphone, and half the height in case of the ipad.
-// There is a 5% edge applied, but only on iPhone, strangely enough and only in the width dimension, not height.
-// XXX: Why only on phone?
-// On the ipad the height is halved again so that controls are only in the lower, reachable area, but no edge area is applied.
-
-// #mivance
-// Touch move handler.
-// Note there is a stick inner and outer size, and as soon as you start moving in the stick hit zone it will move the inner box around with your touch point with a width and height of the inner size.
-// It does not *grow* the frame, just moves it around.
-// The stick normalization value is calculated...
+- (float) remapStickValue:(float)value {
+    // local clamp
+    if (fabsf(value) < STICK_LOCAL_DEAD_ZONE)
+    {
+        value = 0;
+    }
+    
+    // remap outside the clamp into fully normalized space again
+    // and then back out into the space that the remove deadzone
+    // is expecting
+    if (value >= 0.0f)
+    {
+        value = fmaxf(value - STICK_LOCAL_DEAD_ZONE, 0.0f) / (1.0f - STICK_LOCAL_DEAD_ZONE);
+        value = (value * (1.0f - STICK_REMOTE_DEAD_ZONE)) + STICK_REMOTE_DEAD_ZONE;
+    }
+    else
+    {
+        value = fminf(value + STICK_LOCAL_DEAD_ZONE, 0.0f) / (1.0f - STICK_LOCAL_DEAD_ZONE);
+        value = (value * ( 1.0f - STICK_REMOTE_DEAD_ZONE)) - STICK_REMOTE_DEAD_ZONE;
+    }
+    
+    return value;
+}
 
 - (BOOL) handleTouchMovedEvent:touches {
     BOOL updated = false;
@@ -571,35 +638,35 @@ static float L3_Y;
         float xLoc = touchLocation.x;
         float yLoc = touchLocation.y;
         if (touch == _lsTouch) {
-            // #mivance
-            // clamp the location to the max x,y
             if (xLoc > lsMaxX) xLoc = lsMaxX;
             if (xLoc < lsMinX) xLoc = lsMinX;
             if (yLoc > lsMaxY) yLoc = lsMaxY;
             if (yLoc < lsMinY) yLoc = lsMinY;
             
-            // #mivance
-            // this moves the frame to track the location which is a slightly weird way of doing things vs calculating all of your validity within the outer size ring... i wonder if this allows the touch up events to properly synchronize such that there is always a properly paired touch down and then touch up?
+            [CATransaction begin];
+            [CATransaction setAnimationDuration:STICK_ANIMATION_DURATION];
+            
             _leftStick.frame = CGRectMake(xLoc - STICK_INNER_SIZE / 2, yLoc - STICK_INNER_SIZE / 2, STICK_INNER_SIZE, STICK_INNER_SIZE);
             
-            // default left stick center is at LS_CENTER_X which is at 35% of frame width on iphone + the edge offset which is 5% on iphone, so 40%
-            // LS_CENTER_Y is at 75% of frame height on iphone + edge offset in y which is 0, so 25% offset
-            // thus for a fake viewport of 1280, 720
-            // we'd have LS_CENTER_[XY] of [1280 * 0.4 == 512, 720 * 0.75 == 540]
-            // STICK_INNER is 48x48 (amusingly actually 48x49), and STICK_OUTER will be 80x80
-            // thus lsMaxX will be 512 + 40 == 552
-            // and lsMaxY will be 540 + 40 == 580
-            // note that xLoc and yLoc are clamped to the max
-            // so when xStickVal is at the edge it will end up something like 552 - 512 / 552 - 512, 40 / 40 == 1
+            [CATransaction commit];
+            
             float xStickVal = (xLoc - LS_CENTER_X) / (lsMaxX - LS_CENTER_X);
             float yStickVal = (yLoc - LS_CENTER_Y) / (lsMaxY - LS_CENTER_Y);
+
+            xStickVal = [self remapStickValue:xStickVal];
+            yStickVal = [self remapStickValue:yStickVal];
             
-            // and then if it's within 10% of the width of the space it gets zero'd out
-            if (fabsf(xStickVal) < STICK_DEAD_ZONE) xStickVal = 0;
-            if (fabsf(yStickVal) < STICK_DEAD_ZONE) yStickVal = 0;
-            
-            // and then we multiplye the stick val by 32767 to go from normalized [0,1] range to [-32768,32767]
+            // and then we multiply the stick val by 32766 to go from
+            // normalized [0,1] range to [-32766,32766]
             [_controllerSupport updateLeftStick:_controller x:0x7FFE * xStickVal y:0x7FFE * -yStickVal];
+            
+            // need to clear l3/r3 button flags in the move handler or
+            // they'll never be updated once the touch down event flags
+            // them as on
+            if (l3Set) {
+                [_controllerSupport clearButtonFlag:_controller flags:LS_CLK_FLAG];
+                l3Set = FALSE;
+            }
             
             updated = true;
         } else if (touch == _rsTouch) {
@@ -608,19 +675,28 @@ static float L3_Y;
             if (yLoc > rsMaxY) yLoc = rsMaxY;
             if (yLoc < rsMinY) yLoc = rsMinY;
             
+            [CATransaction begin];
+            [CATransaction setAnimationDuration:STICK_ANIMATION_DURATION];
+
             _rightStick.frame = CGRectMake(xLoc - STICK_INNER_SIZE / 2, yLoc - STICK_INNER_SIZE / 2, STICK_INNER_SIZE, STICK_INNER_SIZE);
+            
+            [CATransaction commit];
             
             float xStickVal = (xLoc - RS_CENTER_X) / (rsMaxX - RS_CENTER_X);
             float yStickVal = (yLoc - RS_CENTER_Y) / (rsMaxY - RS_CENTER_Y);
             
-            if (fabsf(xStickVal) < STICK_DEAD_ZONE) xStickVal = 0;
-            if (fabsf(yStickVal) < STICK_DEAD_ZONE) yStickVal = 0;
-            
+            xStickVal = [self remapStickValue:xStickVal];
+            yStickVal = [self remapStickValue:yStickVal];
+
             [_controllerSupport updateRightStick:_controller x:0x7FFE * xStickVal y:0x7FFE * -yStickVal];
+            
+            if (r3Set) {
+                [_controllerSupport clearButtonFlag:_controller flags:RS_CLK_FLAG];
+                r3Set = FALSE;
+            }
             
             updated = true;
         } else if (touch == _dpadTouch) {
-            // #mivance if we're moving around on the dpad, each movement clear all the flags and then only reactivate the flag for the element being touched
             [_controllerSupport clearButtonFlag:_controller
                                           flags:UP_FLAG | DOWN_FLAG | LEFT_FLAG | RIGHT_FLAG];
             
@@ -663,10 +739,6 @@ static float L3_Y;
         } else if (touch == _l3Touch) {
             buttonTouch = true;
         } else if (touch == _r3Touch) {
-            // #mivance not sure what's up with all of these being tracked
-            // whether the down is signalled as you're puttering around?
-            // a data oriented version of this that looped over an array
-            // of objects with IDs or something would be easier to log properly
             buttonTouch = true;
         }
         if ([_deadTouches containsObject:touch]) {
@@ -676,20 +748,10 @@ static float L3_Y;
     if (updated) {
         [_controllerSupport updateFinished:_controller];
     }
-        return updated || buttonTouch;
+    [_debugConsole updateConsoleWithController:_controller];
+    return updated || buttonTouch;
 }
 
-// #mivance
-// All input objects are manually enumerated and named as actual objects, e.g. _aButton.
-// We handle three different types of events: touch down, touch moved, touch up.
-// When we receive one of these we will loop over every single object in the OSC and handle them in a few ways:
-//   - for buttons, we flag them as down if in the down handler
-//   -
-// For all events we record the touch event into a private named touch object, e.g. _aTouch.
-// We track if any touch event was registered via updated.
-// If a stick was touched we track that via stickTouch.
-// Q: Why are _deadTouches, e.g. those outside any of the buttons or sticks, tracked?
-// A: They are looked up during move events, and then discarded on up events.
 - (BOOL)handleTouchDownEvent:touches {
     BOOL updated = false;
     BOOL stickTouch = false;
@@ -781,6 +843,7 @@ static float L3_Y;
                 double l3TouchTime = [l3TouchStart timeIntervalSinceNow] * -1000.0;
                 if (l3TouchTime < STICK_CLICK_RATE) {
                     [_controllerSupport setButtonFlag:_controller flags:LS_CLK_FLAG];
+                    l3Set = TRUE;
                     updated = true;
                 }
             }
@@ -793,6 +856,7 @@ static float L3_Y;
                 double r3TouchTime = [r3TouchStart timeIntervalSinceNow] * -1000.0;
                 if (r3TouchTime < STICK_CLICK_RATE) {
                     [_controllerSupport setButtonFlag:_controller flags:RS_CLK_FLAG];
+                    r3Set = TRUE;
                     updated = true;
                 }
             }
@@ -809,18 +873,10 @@ static float L3_Y;
     if (updated) {
         [_controllerSupport updateFinished:_controller];
     }
+    [_debugConsole updateConsoleWithController:_controller];
     return updated || stickTouch;
 }
 
-// #mivance
-// Touch up handler.
-// Same basic infrastructure, loop over all named objects, and now setting the touch object to nil.
-// However instead of testing bounds for a hit test, we now check if the object itself is equivalent to the one already stored elsewhere. In that case, we clear it and also clear the button flag.
-// Note that for the sticks we reset their frame size back to their identity value.
-// Note also that the touch start time for sticks is reset to the current time.
-// Q: Why?
-// We check if an edge touch has resulted in a movemenet greater than 1/4 the width of the screen, in which case it is marked as a swipe.
-// We remove any dead touches.
 - (BOOL)handleTouchUpEvent:touches {
     BOOL updated = false;
     BOOL touched = false;
@@ -871,9 +927,12 @@ static float L3_Y;
             _r2Touch = nil;
             updated = true;
         } else if (touch == _lsTouch) {
+            // Here we'll leave the CA default time, as you get a nice pleasing
+            // slow return to center; similar for rsTouch below.
             _leftStick.frame = CGRectMake(LS_CENTER_X - STICK_INNER_SIZE / 2, LS_CENTER_Y - STICK_INNER_SIZE / 2, STICK_INNER_SIZE, STICK_INNER_SIZE);
             [_controllerSupport updateLeftStick:_controller x:0 y:0];
             [_controllerSupport clearButtonFlag:_controller flags:LS_CLK_FLAG];
+            l3Set = FALSE;
             l3TouchStart = [NSDate date];
             _lsTouch = nil;
             updated = true;
@@ -881,6 +940,7 @@ static float L3_Y;
             _rightStick.frame = CGRectMake(RS_CENTER_X - STICK_INNER_SIZE / 2, RS_CENTER_Y - STICK_INNER_SIZE / 2, STICK_INNER_SIZE, STICK_INNER_SIZE);
             [_controllerSupport updateRightStick:_controller x:0 y:0];
             [_controllerSupport clearButtonFlag:_controller flags:RS_CLK_FLAG];
+            r3Set = FALSE;
             r3TouchStart = [NSDate date];
             _rsTouch = nil;
             updated = true;
@@ -906,7 +966,7 @@ static float L3_Y;
     if (updated) {
         [_controllerSupport updateFinished:_controller];
     }
-    
+    [_debugConsole updateConsoleWithController:_controller];
     return updated || touched;
 }
 

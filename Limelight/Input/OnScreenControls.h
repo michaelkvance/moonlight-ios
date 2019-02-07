@@ -31,6 +31,7 @@ typedef NS_ENUM(NSInteger, OnScreenControlsLevel) {
 - (BOOL) handleTouchUpEvent:(NSSet*)touches;
 - (BOOL) handleTouchMovedEvent:(NSSet*)touches;
 - (void) setLevel:(OnScreenControlsLevel)level;
+- (void) setDeadzones:(float)localDeadzone remoteDeadzone:(float)remoteDeadzone;
 #endif
 
 @end

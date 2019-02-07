@@ -63,7 +63,10 @@
                  multiController:(BOOL)multiController
                        audioOnPC:(BOOL)audioOnPC
                          useHevc:(BOOL)useHevc
-                       enableHdr:(BOOL)enableHdr {
+                       enableHdr:(BOOL)enableHdr
+                   localDeadzone:(float)localDeadzone
+                  remoteDeadzone:(float)remoteDeadzone
+                        swapR2R3:(BOOL)swapR2R3 {
     
     [_managedObjectContext performBlockAndWait:^{
         Settings* settingsToSave = [self retrieveSettings];
@@ -78,6 +81,9 @@
         settingsToSave.playAudioOnPC = audioOnPC;
         settingsToSave.useHevc = useHevc;
         settingsToSave.enableHdr = enableHdr;
+        settingsToSave.localDeadzone = [NSNumber numberWithFloat:localDeadzone];
+        settingsToSave.remoteDeadzone = [NSNumber numberWithFloat:remoteDeadzone];
+        settingsToSave.swapR2R3 = swapR2R3;
         
         [self saveData];
     }];
